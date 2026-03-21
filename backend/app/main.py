@@ -450,3 +450,94 @@ async def get_segment_analytics():
         "segments": segment_stats
     }
 
+
+# ==========================================
+# SCHEDULED EMAIL ENDPOINTS
+# ==========================================
+
+@app.post("/emails/schedule")
+async def schedule_email(payload: dict):
+    """
+    Queue a single email to be sent at a specified time.
+    Payload: customer_name, customer_email, subject, lead_score,
+             quote_value, item_count, scheduled_at (ISO datetime string, UTC)
+    """
+    from datetime import datetime as dt
+    from fastapi import HTTPException
+
+    if "customer_email" not in payload or "scheduled_at" not in payload:
+        raise HTTPException(status_code=400, detail="customer_email and scheduled_at are required")
+
+    job = {
+        "customer_name":  payload.get("customer_name", "Valued Customer"),
+        "customer_email": payload["customer_email"],
+        "subject":        payload.get("subject", "Exclusive IT Solutions for Your Business"),
+        "lead_score":     payload.get("lead_score", 0),
+        "quote_value":    payload.get("quote_value", 0),
+        "item_count":     payload.get("item_count", 0),
+        "scheduled_at":   payload["scheduled_at"],
+        "status":         "pending",
+        "created_at":     dt.utcnow().isoformat(),
+        "sent_at":        None,
+    }
+
+    saved = await db.save_scheduled_email(job)
+    return {"success": True, "job": saved}
+
+
+@app.get("/emails/scheduled")
+async def list_scheduled_emails():
+    """Return all scheduled email jobs (any status)."""
+    jobs = await db.get_scheduled_emails()
+    return jobs
+
+
+@app.delete("/emails/scheduled/{job_id}")
+async def cancel_scheduled_email(job_id: str):
+    """Cancel a pending scheduled email."""
+    await db.update_scheduled_email_status(job_id, status="cancelled")
+    return {"success": True, "message": f"Job {job_id} cancelled"}
+
+@app.delete("/emails/scheduled/{job_id}/delete")
+async def delete_scheduled_email(job_id: str):
+    """Hard delete a scheduled email job from the database."""
+    await db.delete_scheduled_email(job_id)
+    return {"success": True, "message": f"Job {job_id} completely removed"}
+
+
+@app.post("/emails/scheduled/{job_id}/send-now")
+async def send_scheduled_email_now(job_id: str):
+    """
+    Immediately send a pending scheduled email, bypassing the scheduler timer.
+    """
+    from datetime import datetime as dt
+    from fastapi import HTTPException
+    from app.email_sender import send_sales_email as _send
+
+    all_jobs = await db.get_scheduled_emails()
+    job = next((j for j in all_jobs if j["_id"] == job_id), None)
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Scheduled email not found")
+    if job["status"] != "pending":
+        raise HTTPException(status_code=400, detail=f"Cannot send — job status is '{job['status']}'")
+
+    send_result = _send(
+        customer_name=job.get("customer_name", "Valued Customer"),
+        customer_email=job["customer_email"],
+        lead_score=job.get("lead_score", 0),
+        quote_value=job.get("quote_value", 0),
+        item_count=job.get("item_count", 0),
+        subject=job.get("subject", "Exclusive IT Solutions for Your Business"),
+    )
+
+    new_status = "sent" if send_result.get("success") else "failed"
+    await db.update_scheduled_email_status(
+        job_id, status=new_status, sent_at=dt.utcnow().isoformat()
+    )
+
+    return {
+        "success": send_result.get("success"),
+        "message": send_result.get("message"),
+        "status": new_status,
+    }

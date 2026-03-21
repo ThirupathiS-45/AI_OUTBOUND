@@ -20,7 +20,8 @@ class AutomationScheduler:
     Handles automated tasks:
     1. Monthly customer segmentation
     2. Email campaign execution with throttling
-    3. CRM data sync
+    3. Scheduled individual email dispatch (every 1 minute)
+    4. CRM data sync
     """
     
     def __init__(self):
@@ -72,7 +73,45 @@ class AutomationScheduler:
             
         except Exception as e:
             print(f"❌ Monthly Segmentation Failed: {e}")
-    
+
+    async def execute_scheduled_emails(self):
+        """
+        Poll the scheduled_emails collection every minute.
+        Send any email whose scheduled_at time has passed and status is 'pending'.
+        """
+        try:
+            pending = await db.get_pending_scheduled_emails()
+            if not pending:
+                return
+
+            print(f"\n⏰ Scheduled Email Dispatcher: {len(pending)} email(s) due at {datetime.now()}")
+
+            for job in pending:
+                try:
+                    result = send_sales_email(
+                        customer_name=job.get("customer_name", "Valued Customer"),
+                        customer_email=job["customer_email"],
+                        lead_score=job.get("lead_score", 0),
+                        quote_value=job.get("quote_value", 0),
+                        item_count=job.get("item_count", 0),
+                        subject=job.get("subject", "Exclusive IT Solutions for Your Business"),
+                    )
+
+                    new_status = "sent" if result.get("success") else "failed"
+                    await db.update_scheduled_email_status(
+                        job["_id"],
+                        status=new_status,
+                        sent_at=datetime.utcnow().isoformat()
+                    )
+                    print(f"  {'✅' if new_status == 'sent' else '❌'} {new_status.upper()}: {job['customer_email']}")
+
+                except Exception as e:
+                    print(f"  ❌ Error sending to {job.get('customer_email')}: {e}")
+                    await db.update_scheduled_email_status(job["_id"], status="failed")
+
+        except Exception as e:
+            print(f"❌ Scheduled Email Dispatcher Failed: {e}")
+
     async def execute_scheduled_campaigns(self):
         """
         Execute scheduled email campaigns with throttling.
@@ -109,7 +148,6 @@ class AutomationScheduler:
                     throttle_rate = campaign.get("throttle_rate", 10)  # emails per minute
                     delay = 60 / throttle_rate  # seconds between emails
                     
-                    use_case_id = campaign.get("use_case_id")
                     emails_sent = 0
                     
                     # Send emails with throttling
@@ -162,9 +200,6 @@ class AutomationScheduler:
         Problem statement: "Ingest customer data from CRM"
         """
         print(f"\n🔄 CRM Sync Job at {datetime.now()}")
-        
-        # This would call the actual CRM sync endpoint
-        # For now, just log the scheduled execution
         print("CRM sync would run here (requires CRM credentials)")
     
     def start(self):
@@ -190,6 +225,14 @@ class AutomationScheduler:
             id="campaign_execution",
             name="Email Campaign Execution"
         )
+
+        # Scheduled individual emails - Check every minute
+        self.scheduler.add_job(
+            self.execute_scheduled_emails,
+            CronTrigger(minute="*"),
+            id="scheduled_email_dispatch",
+            name="Scheduled Email Dispatcher"
+        )
         
         # CRM Sync - Daily at 1 AM
         self.scheduler.add_job(
@@ -204,6 +247,7 @@ class AutomationScheduler:
         print("✅ Automation Scheduler Started")
         print("   - Monthly Segmentation: 1st of month at 2:00 AM")
         print("   - Campaign Execution: Every 15 minutes")
+        print("   - Scheduled Email Dispatch: Every 1 minute")
         print("   - CRM Sync: Daily at 1:00 AM")
     
     def stop(self):

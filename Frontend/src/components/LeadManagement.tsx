@@ -274,16 +274,45 @@ export default function LeadManagement() {
                             </button>
 
                             {scoreResult && (
-                                <div className="mt-6 p-6 glass rounded-xl animate-slide-up">
-                                    <h3 className="text-lg font-bold mb-4">Prediction Results</h3>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="text-center p-4 bg-gradient-to-br from-primary-500 to-primary-700 rounded-xl text-white">
-                                            <div className="text-sm opacity-90 mb-1">Lead Score</div>
-                                            <div className="text-3xl font-bold">{(scoreResult.lead_score * 100).toFixed(1)}</div>
+                                <div className="mt-6 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-100 rounded-xl animate-slide-up">
+                                    <h3 className="text-xl font-bold mb-4 text-blue-900 flex items-center gap-2">
+                                        <Zap className="w-5 h-5 text-yellow-500" /> 
+                                        Prediction Results
+                                    </h3>
+                                    
+                                    {/* Main Scores */}
+                                    <div className="grid grid-cols-2 gap-4 mb-4">
+                                        <div className="text-center p-5 bg-gradient-to-br from-primary-600 to-indigo-700 rounded-xl text-white shadow-lg">
+                                            <div className="text-sm font-semibold opacity-90 mb-1 uppercase tracking-wider">Lead Score</div>
+                                            <div className="text-4xl font-extrabold">{(scoreResult.lead_score * 100).toFixed(1)}</div>
+                                            <div className="text-xs opacity-75 mt-1">/ 100 maximum limit</div>
                                         </div>
-                                        <div className="text-center p-4 bg-gradient-to-br from-secondary-500 to-secondary-700 rounded-xl text-white">
-                                            <div className="text-sm opacity-90 mb-1">Conversion Probability</div>
-                                            <div className="text-3xl font-bold">{(scoreResult.conversion_probability * 100).toFixed(1)}%</div>
+                                        <div className="text-center p-5 bg-gradient-to-br from-emerald-500 to-teal-700 rounded-xl text-white shadow-lg">
+                                            <div className="text-sm font-semibold opacity-90 mb-1 uppercase tracking-wider">Conversion Prob.</div>
+                                            <div className="text-4xl font-extrabold">{(scoreResult.conversion_probability * 100).toFixed(1)}%</div>
+                                            <div className="text-xs opacity-75 mt-1">AI calculated likelihood</div>
+                                        </div>
+                                    </div>
+
+                                    {/* Detailed Metrics Grid */}
+                                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                                        <div className="bg-white p-3 rounded-lg border border-gray-200">
+                                            <div className="text-xs text-gray-500 uppercase font-semibold mb-1">Expected Revenue</div>
+                                            <div className="font-bold text-gray-900 text-lg">
+                                                ${(scoringLead.quote_value * scoreResult.conversion_probability).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                            </div>
+                                        </div>
+                                        <div className="bg-white p-3 rounded-lg border border-gray-200">
+                                            <div className="text-xs text-gray-500 uppercase font-semibold mb-1">Complexity Factor</div>
+                                            <div className="font-bold text-gray-900 text-lg">
+                                                {scoringLead.item_count > 20 ? 'High' : scoringLead.item_count > 5 ? 'Medium' : 'Low'}
+                                            </div>
+                                        </div>
+                                        <div className="bg-white p-3 rounded-lg border border-gray-200">
+                                            <div className="text-xs text-gray-500 uppercase font-semibold mb-1">Est. Time to Close</div>
+                                            <div className="font-bold text-gray-900 text-lg">
+                                                {scoringLead.conversion_days} Days
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

@@ -77,6 +77,30 @@ export interface SendEmailResponse {
     email_body: string;
 }
 
+export interface ScheduleEmailInput {
+    customer_name: string;
+    customer_email: string;
+    subject: string;
+    lead_score: number;
+    quote_value: number;
+    item_count: number;
+    scheduled_at: string; // ISO 8601 UTC datetime
+}
+
+export interface ScheduledEmail {
+    _id: string;
+    customer_name: string;
+    customer_email: string;
+    subject: string;
+    lead_score: number;
+    quote_value: number;
+    item_count: number;
+    scheduled_at: string;
+    status: 'pending' | 'sent' | 'failed' | 'cancelled';
+    created_at: string;
+    sent_at: string | null;
+}
+
 // API Functions
 export const apiService = {
     // Health check
@@ -115,11 +139,42 @@ export const apiService = {
         return response.data;
     },
 
-    // Send email to customer
+    // Send email to customer immediately
     async sendEmail(data: SendEmailInput): Promise<SendEmailResponse> {
         const response = await api.post('/send-email', data);
+        return response.data;
+    },
+
+    // Schedule email for later delivery
+    async scheduleEmail(data: ScheduleEmailInput): Promise<{ success: boolean; job: ScheduledEmail }> {
+        const response = await api.post('/emails/schedule', data);
+        return response.data;
+    },
+
+    // Get all scheduled emails
+    async getScheduledEmails(): Promise<ScheduledEmail[]> {
+        const response = await api.get('/emails/scheduled');
+        return response.data;
+    },
+
+    // Cancel a pending scheduled email (soft delete)
+    async cancelScheduledEmail(jobId: string): Promise<{ success: boolean; message: string }> {
+        const response = await api.delete(`/emails/scheduled/${jobId}`);
+        return response.data;
+    },
+
+    // Hard delete a scheduled email record
+    async deleteScheduledEmail(jobId: string): Promise<{ success: boolean; message: string }> {
+        const response = await api.delete(`/emails/scheduled/${jobId}/delete`);
+        return response.data;
+    },
+
+    // Send a scheduled email immediately now
+    async sendScheduledEmailNow(jobId: string): Promise<{ success: boolean; message: string; status: string }> {
+        const response = await api.post(`/emails/scheduled/${jobId}/send-now`);
         return response.data;
     },
 };
 
 export default api;
+
