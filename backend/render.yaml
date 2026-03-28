@@ -1,0 +1,34 @@
+services:
+  - type: web
+    name: sales-crm-api
+    runtime: python
+    plan: standard
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11
+      - key: MONGO_URL
+        fromService:
+          type: pserv
+          name: sales-crm-db
+          property: connectionString
+      - key: DATABASE_URL
+        fromService:
+          type: pserv
+          name: sales-crm-db
+          property: connectionString
+
+  - type: static
+    name: sales-crm-frontend
+    plan: free
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://sales-crm-api.onrender.com
+
+  - type: pserv
+    name: sales-crm-db
+    plan: free
+    runtime: mongodb
