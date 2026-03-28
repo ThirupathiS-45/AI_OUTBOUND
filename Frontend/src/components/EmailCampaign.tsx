@@ -206,43 +206,43 @@ export default function EmailCampaign() {
     const copyToClipboard = () => navigator.clipboard.writeText(generatedEmail);
 
     return (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-4 sm:space-y-6 animate-fade-in">
             {/* Header */}
-            <div className="glass rounded-2xl p-8">
-                <h1 className="text-4xl font-bold gradient-text mb-2">Email Campaign Scheduler</h1>
-                <p className="text-gray-600">
+            <div className="glass rounded-lg sm:rounded-2xl p-4 sm:p-8">
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold gradient-text mb-2">Email Campaign Scheduler</h1>
+                <p className="text-sm sm:text-base text-gray-600">
                     AI-powered email generation with scheduled delivery — queue emails in advance or send instantly.
                 </p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
                 {/* Lead Selection */}
                 <div className="card">
-                    <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
-                        <Target className="w-6 h-6 text-primary-500" />
-                        Select High-Value Lead
+                    <h3 className="text-lg sm:text-xl font-bold mb-3 sm:mb-4 flex items-center gap-2">
+                        <Target className="w-5 h-5 sm:w-6 sm:h-6 text-primary-500 flex-shrink-0" />
+                        <span className="truncate">Select High-Value Lead</span>
                     </h3>
                     <div className="space-y-2 max-h-96 overflow-y-auto">
                         {leads.map((lead, index) => (
                             <div
                                 key={index}
                                 onClick={() => handleLeadSelect(lead)}
-                                className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${selectedLead === lead
+                                className={`p-3 sm:p-4 rounded-lg border-2 cursor-pointer transition-all text-sm ${selectedLead === lead
                                     ? 'border-primary-500 bg-primary-50'
                                     : 'border-gray-200 hover:border-primary-300'
                                     }`}
                             >
-                                <div className="font-semibold text-gray-900">{lead.company_name}</div>
-                                <div className="text-sm text-gray-600 mt-1">
+                                <div className="font-semibold text-gray-900 truncate">{lead.company_name}</div>
+                                <div className="text-xs sm:text-sm text-gray-600 mt-1 truncate">
                                     Score: {((lead.lead_score || 0) * 100).toFixed(1)}%
                                 </div>
-                                <div className="text-sm text-gray-600">
+                                <div className="text-xs sm:text-sm text-gray-600 truncate">
                                     Value: ${lead.quote_value.toLocaleString()}
                                 </div>
                             </div>
                         ))}
                         {leads.length === 0 && (
-                            <div className="text-center text-gray-500 py-8">No high-value leads available</div>
+                            <div className="text-center text-gray-500 py-8 text-sm">No high-value leads available</div>
                         )}
                     </div>
                 </div>

@@ -85,26 +85,26 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
     if (loading) {
         return (
-            <div className="flex items-center justify-center h-screen">
-                <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-primary-500"></div>
+            <div className="flex items-center justify-center min-h-[400px]">
+                <div className="animate-spin rounded-full h-12 sm:h-16 w-12 sm:w-16 border-t-4 border-b-4 border-primary-500"></div>
             </div>
         );
     }
 
     return (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-4 sm:space-y-6 animate-fade-in">
             {/* Header */}
-            <div className="glass rounded-2xl p-8">
-                <h1 className="text-4xl font-bold gradient-text mb-2">
+            <div className="glass rounded-lg sm:rounded-2xl p-4 sm:p-8">
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold gradient-text mb-2">
                     AI-Powered Outbound Sales Dashboard
                 </h1>
-                <p className="text-gray-600">
+                <p className="text-sm sm:text-base text-gray-600">
                     GenAI + Predictive Analytics + CRM Integration for IT Industry
                 </p>
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6">
                 <StatsCard
                     icon={<Users className="w-8 h-8" />}
                     title="Total Leads"
@@ -136,7 +136,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             </div>
 
             {/* Charts */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
                 {/* Lead Score Distribution */}
                 <div className="card">
                     <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
@@ -207,7 +207,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             </div>
 
             {/* Quick Actions */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
                 <QuickActionCard
                     icon={<Target className="w-8 h-8" />}
                     title="Score New Lead"
@@ -246,14 +246,14 @@ interface StatsCardProps {
 function StatsCard({ icon, title, value, subtitle, gradient }: StatsCardProps) {
     return (
         <div className="card group hover:scale-105">
-            <div className="flex items-start justify-between">
-                <div>
-                    <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
-                    <p className="text-3xl font-bold text-gray-900 mb-1">{value}</p>
-                    <p className="text-xs text-gray-500">{subtitle}</p>
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                <div className="min-w-0">
+                    <p className="text-xs sm:text-sm font-medium text-gray-600 mb-1">{title}</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-gray-900 mb-1 truncate">{value}</p>
+                    <p className="text-xs text-gray-500 line-clamp-1">{subtitle}</p>
                 </div>
-                <div className={`p-3 rounded-xl bg-gradient-to-br ${gradient} text-white group-hover:scale-110 transition-transform`}>
-                    {icon}
+                <div className={`p-2 sm:p-3 rounded-lg sm:rounded-xl bg-gradient-to-br ${gradient} text-white group-hover:scale-110 transition-transform flex-shrink-0`}>
+                    <div className="w-6 h-6 sm:w-8 sm:h-8">{icon}</div>
                 </div>
             </div>
         </div>
@@ -275,11 +275,11 @@ function QuickActionCard({ icon, title, description, gradient, onClick }: QuickA
             onClick={onClick}
             className="card cursor-pointer group hover:scale-105"
         >
-            <div className={`w-16 h-16 rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center text-white mb-4 group-hover:scale-110 transition-transform`}>
-                {icon}
+            <div className={`w-12 h-12 sm:w-16 sm:h-16 rounded-lg sm:rounded-xl bg-gradient-to-br ${gradient} flex items-center justify-center text-white mb-3 sm:mb-4 group-hover:scale-110 transition-transform`}>
+                <div className="w-6 h-6 sm:w-8 sm:h-8">{icon}</div>
             </div>
-            <h4 className="text-lg font-bold mb-2">{title}</h4>
-            <p className="text-sm text-gray-600">{description}</p>
+            <h4 className="text-base sm:text-lg font-bold mb-1 sm:mb-2">{title}</h4>
+            <p className="text-xs sm:text-sm text-gray-600 line-clamp-2">{description}</p>
         </div>
     );
 }
