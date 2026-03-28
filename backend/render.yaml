@@ -8,16 +8,26 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11
+      # MongoDB Atlas Connection (from environment)
       - key: MONGO_URL
-        fromService:
-          type: pserv
-          name: sales-crm-db
-          property: connectionString
-      - key: DATABASE_URL
-        fromService:
-          type: pserv
-          name: sales-crm-db
-          property: connectionString
+        sync: false
+      - key: DB_NAME
+        value: ai_sales_db
+      # API Keys
+      - key: GROQ_API_KEY
+        sync: false
+      # Email Configuration
+      - key: EMAIL_HOST
+        value: smtp.gmail.com
+      - key: EMAIL_PORT
+        value: '587'
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASSWORD
+        sync: false
+      # CRM Integration
+      - key: USE_CRM
+        value: 'false'
 
   - type: static
     name: sales-crm-frontend
@@ -27,8 +37,3 @@ services:
     envVars:
       - key: VITE_API_URL
         value: https://sales-crm-api.onrender.com
-
-  - type: pserv
-    name: sales-crm-db
-    plan: free
-    runtime: mongodb
