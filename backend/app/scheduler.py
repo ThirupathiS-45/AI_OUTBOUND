@@ -20,6 +20,188 @@ from app.model import model
 import time
 
 
+# ===== MODULE-LEVEL ASYNC FUNCTIONS (MUST BE OUTSIDE CLASS) =====
+# These must be at module level so they can be serialized by MongoDBJobStore
+# (Instance methods cause circular reference errors)
+
+async def monthly_segmentation_job():
+    """
+    Run monthly re-segmentation of all customers.
+    Identifies upsell/cross-sell opportunities.
+    """
+    print(f"\n🔄 Starting Monthly Segmentation Job at {datetime.now()}")
+    
+    try:
+        all_leads = await db.get_all_leads()
+        
+        if not all_leads:
+            print("⚠️ No leads found for segmentation")
+            return
+        
+        updated_count = 0
+        segment_changes = {}
+        
+        for lead in all_leads:
+            try:
+                old_segment = lead.get("segment", "UNKNOWN")
+                
+                # Re-enrich and re-segment
+                enriched = enrich_lead_data(lead)
+                enriched['last_segmented_at'] = datetime.now().isoformat()
+                
+                new_segment = enriched.get("segment")
+                
+                # Track segment changes (upsell/cross-sell opportunities)
+                if old_segment != new_segment:
+                    change_key = f"{old_segment} → {new_segment}"
+                    segment_changes[change_key] = segment_changes.get(change_key, 0) + 1
+                
+                # Save updated lead
+                await db.save_lead(enriched)
+                updated_count += 1
+                
+            except Exception as e:
+                print(f"Error segmenting {lead.get('company_name')}: {e}")
+        
+        print(f"✅ Monthly Segmentation Complete:")
+        print(f"   - Total Leads Updated: {updated_count}")
+        print(f"   - Segment Changes: {segment_changes}")
+        
+    except Exception as e:
+        print(f"❌ Monthly Segmentation Failed: {e}")
+
+
+async def execute_scheduled_emails():
+    """
+    Poll the scheduled_emails collection every minute.
+    Send any email whose scheduled_at time has passed and status is 'pending'.
+    """
+    try:
+        pending = await db.get_pending_scheduled_emails()
+        if not pending:
+            return
+
+        print(f"\n⏰ Scheduled Email Dispatcher: {len(pending)} email(s) due at {datetime.now()}")
+
+        for job in pending:
+            try:
+                result = send_sales_email(
+                    customer_name=job.get("customer_name", "Valued Customer"),
+                    customer_email=job["customer_email"],
+                    lead_score=job.get("lead_score", 0),
+                    quote_value=job.get("quote_value", 0),
+                    item_count=job.get("item_count", 0),
+                    subject=job.get("subject", "Exclusive IT Solutions for Your Business"),
+                )
+
+                new_status = "sent" if result.get("success") else "failed"
+                await db.update_scheduled_email_status(
+                    job["_id"],
+                    status=new_status,
+                    sent_at=datetime.utcnow().isoformat()
+                )
+                print(f"  {'✅' if new_status == 'sent' else '❌'} {new_status.upper()}: {job['customer_email']}")
+
+            except Exception as e:
+                print(f"  ❌ Error sending to {job.get('customer_email')}: {e}")
+                await db.update_scheduled_email_status(job["_id"], status="failed")
+
+    except Exception as e:
+        print(f"❌ Scheduled Email Dispatcher Failed: {e}")
+
+
+async def execute_scheduled_campaigns():
+    """
+    Execute scheduled email campaigns with throttling.
+    Sends emails at configured rate to avoid spam.
+    """
+    print(f"\n📧 Checking for Scheduled Campaigns at {datetime.now()}")
+    
+    try:
+        # Get all scheduled campaigns
+        campaigns = await db.get_all_campaigns()
+        scheduled = [c for c in campaigns if c.get("status") == "scheduled"]
+        
+        if not scheduled:
+            print("No campaigns scheduled for execution")
+            return
+        
+        for campaign in scheduled:
+            try:
+                # Check if campaign should run now
+                send_time = campaign.get("send_time")
+                if send_time and datetime.fromisoformat(send_time) > datetime.now():
+                    continue  # Not yet time
+                
+                print(f"🚀 Executing Campaign: {campaign['name']}")
+                
+                # Update status to active
+                await db.update_campaign_status(
+                    str(campaign["_id"]), 
+                    status="active"
+                )
+                
+                # Get target leads
+                target_emails = campaign.get("target_leads", [])
+                throttle_rate = campaign.get("throttle_rate", 10)  # emails per minute
+                delay = 60 / throttle_rate  # seconds between emails
+                
+                emails_sent = 0
+                
+                # Send emails with throttling
+                for email in target_emails[:50]:  # Limit to 50 per execution
+                    try:
+                        # Fetch lead data
+                        all_leads = await db.get_all_leads()
+                        lead = next((l for l in all_leads if l.get("email") == email), None)
+                        
+                        if not lead:
+                            continue
+                        
+                        # Generate and send email
+                        result = send_sales_email(
+                            customer_name=lead.get("company_name"),
+                            customer_email=email,
+                            lead_score=lead.get("lead_score", 0),
+                            quote_value=lead.get("quote_value", 0),
+                            item_count=lead.get("item_count", 0),
+                            subject=f"Exclusive {campaign['campaign_type']} Opportunity"
+                        )
+                        
+                        if result.get("success"):
+                            emails_sent += 1
+                        
+                        # Throttle - wait before next email
+                        time.sleep(delay)
+                        
+                    except Exception as e:
+                        print(f"Error sending to {email}: {e}")
+                
+                # Update campaign progress
+                await db.update_campaign_status(
+                    str(campaign["_id"]),
+                    status="completed",
+                    emails_sent=emails_sent
+                )
+                
+                print(f"✅ Campaign Complete: {emails_sent} emails sent")
+                
+            except Exception as e:
+                print(f"Campaign execution error: {e}")
+    
+    except Exception as e:
+        print(f"❌ Campaign Execution Failed: {e}")
+
+
+async def sync_crm_data():
+    """
+    Automated CRM data sync.
+    Problem statement: "Ingest customer data from CRM"
+    """
+    print(f"\n🔄 CRM Sync Job at {datetime.now()}")
+    print("CRM sync would run here (requires CRM credentials)")
+
+
 class AutomationScheduler:
     """
     Handles automated tasks:
@@ -30,6 +212,8 @@ class AutomationScheduler:
     
     RENDER COMPATIBILITY: Uses MongoDB job store for persistent storage
     so scheduled jobs survive app restarts and deployments.
+    IMPORTANT: Jobs reference module-level functions (not instance methods)
+    to avoid serialization errors with MongoDBJobStore.
     """
     
     def __init__(self):
@@ -52,7 +236,7 @@ class AutomationScheduler:
             'default': MongoDBJobStore(
                 database=db_name,
                 collection='scheduler_jobs',
-                client=mongo_client  # Pass the actual MongoClient object, not url
+                client=mongo_client  # Pass the actual MongoClient object
             )
         }
         
@@ -77,180 +261,6 @@ class AutomationScheduler:
         
         self.is_running = False
     
-    async def monthly_segmentation_job(self):
-        """
-        Run monthly re-segmentation of all customers.
-        Identifies upsell/cross-sell opportunities.
-        """
-        print(f"\n🔄 Starting Monthly Segmentation Job at {datetime.now()}")
-        
-        try:
-            all_leads = await db.get_all_leads()
-            
-            if not all_leads:
-                print("⚠️ No leads found for segmentation")
-                return
-            
-            updated_count = 0
-            segment_changes = {}
-            
-            for lead in all_leads:
-                try:
-                    old_segment = lead.get("segment", "UNKNOWN")
-                    
-                    # Re-enrich and re-segment
-                    enriched = enrich_lead_data(lead)
-                    enriched['last_segmented_at'] = datetime.now().isoformat()
-                    
-                    new_segment = enriched.get("segment")
-                    
-                    # Track segment changes (upsell/cross-sell opportunities)
-                    if old_segment != new_segment:
-                        change_key = f"{old_segment} → {new_segment}"
-                        segment_changes[change_key] = segment_changes.get(change_key, 0) + 1
-                    
-                    # Save updated lead
-                    await db.save_lead(enriched)
-                    updated_count += 1
-                    
-                except Exception as e:
-                    print(f"Error segmenting {lead.get('company_name')}: {e}")
-            
-            print(f"✅ Monthly Segmentation Complete:")
-            print(f"   - Total Leads Updated: {updated_count}")
-            print(f"   - Segment Changes: {segment_changes}")
-            
-        except Exception as e:
-            print(f"❌ Monthly Segmentation Failed: {e}")
-
-    async def execute_scheduled_emails(self):
-        """
-        Poll the scheduled_emails collection every minute.
-        Send any email whose scheduled_at time has passed and status is 'pending'.
-        """
-        try:
-            pending = await db.get_pending_scheduled_emails()
-            if not pending:
-                return
-
-            print(f"\n⏰ Scheduled Email Dispatcher: {len(pending)} email(s) due at {datetime.now()}")
-
-            for job in pending:
-                try:
-                    result = send_sales_email(
-                        customer_name=job.get("customer_name", "Valued Customer"),
-                        customer_email=job["customer_email"],
-                        lead_score=job.get("lead_score", 0),
-                        quote_value=job.get("quote_value", 0),
-                        item_count=job.get("item_count", 0),
-                        subject=job.get("subject", "Exclusive IT Solutions for Your Business"),
-                    )
-
-                    new_status = "sent" if result.get("success") else "failed"
-                    await db.update_scheduled_email_status(
-                        job["_id"],
-                        status=new_status,
-                        sent_at=datetime.utcnow().isoformat()
-                    )
-                    print(f"  {'✅' if new_status == 'sent' else '❌'} {new_status.upper()}: {job['customer_email']}")
-
-                except Exception as e:
-                    print(f"  ❌ Error sending to {job.get('customer_email')}: {e}")
-                    await db.update_scheduled_email_status(job["_id"], status="failed")
-
-        except Exception as e:
-            print(f"❌ Scheduled Email Dispatcher Failed: {e}")
-
-    async def execute_scheduled_campaigns(self):
-        """
-        Execute scheduled email campaigns with throttling.
-        Sends emails at configured rate to avoid spam.
-        """
-        print(f"\n📧 Checking for Scheduled Campaigns at {datetime.now()}")
-        
-        try:
-            # Get all scheduled campaigns
-            campaigns = await db.get_all_campaigns()
-            scheduled = [c for c in campaigns if c.get("status") == "scheduled"]
-            
-            if not scheduled:
-                print("No campaigns scheduled for execution")
-                return
-            
-            for campaign in scheduled:
-                try:
-                    # Check if campaign should run now
-                    send_time = campaign.get("send_time")
-                    if send_time and datetime.fromisoformat(send_time) > datetime.now():
-                        continue  # Not yet time
-                    
-                    print(f"🚀 Executing Campaign: {campaign['name']}")
-                    
-                    # Update status to active
-                    await db.update_campaign_status(
-                        str(campaign["_id"]), 
-                        status="active"
-                    )
-                    
-                    # Get target leads
-                    target_emails = campaign.get("target_leads", [])
-                    throttle_rate = campaign.get("throttle_rate", 10)  # emails per minute
-                    delay = 60 / throttle_rate  # seconds between emails
-                    
-                    emails_sent = 0
-                    
-                    # Send emails with throttling
-                    for email in target_emails[:50]:  # Limit to 50 per execution
-                        try:
-                            # Fetch lead data
-                            all_leads = await db.get_all_leads()
-                            lead = next((l for l in all_leads if l.get("email") == email), None)
-                            
-                            if not lead:
-                                continue
-                            
-                            # Generate and send email
-                            result = send_sales_email(
-                                customer_name=lead.get("company_name"),
-                                customer_email=email,
-                                lead_score=lead.get("lead_score", 0),
-                                quote_value=lead.get("quote_value", 0),
-                                item_count=lead.get("item_count", 0),
-                                subject=f"Exclusive {campaign['campaign_type']} Opportunity"
-                            )
-                            
-                            if result.get("success"):
-                                emails_sent += 1
-                            
-                            # Throttle - wait before next email
-                            time.sleep(delay)
-                            
-                        except Exception as e:
-                            print(f"Error sending to {email}: {e}")
-                    
-                    # Update campaign progress
-                    await db.update_campaign_status(
-                        str(campaign["_id"]),
-                        status="completed",
-                        emails_sent=emails_sent
-                    )
-                    
-                    print(f"✅ Campaign Complete: {emails_sent} emails sent")
-                    
-                except Exception as e:
-                    print(f"Campaign execution error: {e}")
-        
-        except Exception as e:
-            print(f"❌ Campaign Execution Failed: {e}")
-    
-    async def sync_crm_data(self):
-        """
-        Automated CRM data sync.
-        Problem statement: "Ingest customer data from CRM"
-        """
-        print(f"\n🔄 CRM Sync Job at {datetime.now()}")
-        print("CRM sync would run here (requires CRM credentials)")
-    
     def start(self):
         """
         Start the scheduler with all jobs using MongoDB persistence.
@@ -258,7 +268,7 @@ class AutomationScheduler:
         RENDER COMPATIBILITY:
         - Jobs are stored in MongoDB, not memory
         - Jobs survive app restarts and deployments
-        - Duplicate jobs are prevented by checking existing IDs
+        - Uses module-level functions (not instance methods) to avoid serialization errors
         """
         if self.is_running:
             print("⚠️ Scheduler already running")
@@ -269,28 +279,29 @@ class AutomationScheduler:
             self.is_running = True
             
             # List of jobs to ensure exist
+            # IMPORTANT: Reference module-level functions, NOT instance methods
             jobs_config = [
                 {
                     'id': 'monthly_segmentation',
-                    'func': self.monthly_segmentation_job,
+                    'func': monthly_segmentation_job,  # Module-level function
                     'trigger': CronTrigger(day=1, hour=2, minute=0),
                     'name': 'Monthly Customer Segmentation'
                 },
                 {
                     'id': 'campaign_execution',
-                    'func': self.execute_scheduled_campaigns,
+                    'func': execute_scheduled_campaigns,  # Module-level function
                     'trigger': CronTrigger(minute="*/15"),
                     'name': 'Email Campaign Execution'
                 },
                 {
                     'id': 'scheduled_email_dispatch',
-                    'func': self.execute_scheduled_emails,
+                    'func': execute_scheduled_emails,  # Module-level function
                     'trigger': CronTrigger(minute="*"),
                     'name': 'Scheduled Email Dispatcher'
                 },
                 {
                     'id': 'crm_sync',
-                    'func': self.sync_crm_data,
+                    'func': sync_crm_data,  # Module-level function
                     'trigger': CronTrigger(hour=1, minute=0),
                     'name': 'Daily CRM Data Sync'
                 }
