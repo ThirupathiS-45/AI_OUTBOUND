@@ -53,6 +53,7 @@ def send_sales_email(
     try:
         # Create SMTP session
         # Use SSL for port 465, TLS for port 587
+        print(f"📧 Attempting to send email via {EMAIL_HOST}:{EMAIL_PORT} (SSL={EMAIL_PORT==465})")
         if EMAIL_PORT == 465:
             with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT, timeout=10) as server:
                 server.login(EMAIL_USER, EMAIL_PASSWORD)
