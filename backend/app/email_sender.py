@@ -29,7 +29,7 @@ def send_sales_email(
     if not EMAIL_USER or not EMAIL_PASSWORD:
         return {
             "success": False,
-            "message": "Email credentials not configured. Please set EMAIL_USER and EMAIL_PASSWORD in .env file.",
+            "message": "Email credentials not configured. Please set EMAIL_USER and EMAIL_PASSWORD in environment.",
             "email_body": ""
         }
     
@@ -51,16 +51,14 @@ def send_sales_email(
     message.attach(MIMEText(email_body, "plain"))
     
     try:
-        # Create SMTP session
-        # Use SSL for port 465, TLS for port 587
-        print(f"📧 Attempting to send email via {EMAIL_HOST}:{EMAIL_PORT} (SSL={EMAIL_PORT==465})")
+        # Create SMTP session - Use SSL for port 465, TLS for port 587
         if EMAIL_PORT == 465:
             with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT, timeout=10) as server:
                 server.login(EMAIL_USER, EMAIL_PASSWORD)
                 server.send_message(message)
         else:
             with smtplib.SMTP(EMAIL_HOST, EMAIL_PORT, timeout=10) as server:
-                server.starttls()  # Enable security
+                server.starttls()
                 server.login(EMAIL_USER, EMAIL_PASSWORD)
                 server.send_message(message)
             
@@ -87,4 +85,5 @@ def send_sales_email(
             "success": False,
             "message": f"Failed to send email: {str(e)}",
             "email_body": email_body
+        }
         }
