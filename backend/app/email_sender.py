@@ -52,12 +52,16 @@ def send_sales_email(
     
     try:
         # Create SMTP session
-        with smtplib.SMTP(EMAIL_HOST, EMAIL_PORT) as server:
-            server.starttls()  # Enable security
-            server.login(EMAIL_USER, EMAIL_PASSWORD)
-            
-            # Send email
-            server.send_message(message)
+        # Use SSL for port 465, TLS for port 587
+        if EMAIL_PORT == 465:
+            with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT, timeout=10) as server:
+                server.login(EMAIL_USER, EMAIL_PASSWORD)
+                server.send_message(message)
+        else:
+            with smtplib.SMTP(EMAIL_HOST, EMAIL_PORT, timeout=10) as server:
+                server.starttls()  # Enable security
+                server.login(EMAIL_USER, EMAIL_PASSWORD)
+                server.send_message(message)
             
         return {
             "success": True,
