@@ -100,10 +100,15 @@ async def execute_scheduled_emails():
                     status=new_status,
                     sent_at=datetime.utcnow().isoformat()
                 )
-                print(f"  {'✅' if new_status == 'sent' else '❌'} {new_status.upper()}: {job['customer_email']}")
+                
+                # Print detailed result with error message if failed
+                if new_status == "sent":
+                    print(f"  ✅ SENT: {job['customer_email']}")
+                else:
+                    print(f"  ❌ FAILED: {job['customer_email']} - Reason: {result.get('message', 'Unknown error')}")
 
             except Exception as e:
-                print(f"  ❌ Error sending to {job.get('customer_email')}: {e}")
+                print(f"  ❌ Error sending to {job.get('customer_email')}: {str(e)}")
                 await db.update_scheduled_email_status(job["_id"], status="failed")
 
     except Exception as e:
