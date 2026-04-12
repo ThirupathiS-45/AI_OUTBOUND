@@ -1,10 +1,14 @@
 """
 Automated Scheduler for Monthly Segmentation and Campaign Execution
 Problem Statement Requirement: "AI segments customers monthly"
+Uses MongoDB for persistent job storage to survive app restarts (critical for Render deployment)
 """
 import asyncio
+import os
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.jobstores.mongodb import MongoDBJobStore
+from apscheduler.executors.asyncio import AsyncIOExecutor
 from datetime import datetime
 from app.database import db
 from app.segmentation import enrich_lead_data
@@ -22,10 +26,46 @@ class AutomationScheduler:
     2. Email campaign execution with throttling
     3. Scheduled individual email dispatch (every 1 minute)
     4. CRM data sync
+    
+    RENDER COMPATIBILITY: Uses MongoDB job store for persistent storage
+    so scheduled jobs survive app restarts and deployments.
     """
     
     def __init__(self):
-        self.scheduler = AsyncIOScheduler()
+        # Get MongoDB URL from environment
+        mongo_url = os.getenv("MONGO_URL", "mongodb://localhost:27017")
+        db_name = os.getenv("DB_NAME", "ai_sales_db")
+        
+        # Configure job store to use MongoDB instead of in-memory
+        # This ensures jobs persist across app restarts (critical for Render)
+        jobstores = {
+            'default': MongoDBJobStore(
+                database=db_name,
+                collection='scheduler_jobs',
+                client=None,  # Will use pymongo.MongoClient with connection string
+                url=mongo_url
+            )
+        }
+        
+        # Configure executors
+        executors = {
+            'default': AsyncIOExecutor()
+        }
+        
+        # Configure job defaults
+        job_defaults = {
+            'coalesce': True,  # Only run one job if multiple are pending
+            'max_instances': 1  # Only one instance of each job at a time
+        }
+        
+        # Create AsyncIOScheduler with MongoDB job store
+        self.scheduler = AsyncIOScheduler(
+            jobstores=jobstores,
+            executors=executors,
+            job_defaults=job_defaults,
+            timezone='UTC'
+        )
+        
         self.is_running = False
     
     async def monthly_segmentation_job(self):
@@ -204,51 +244,76 @@ class AutomationScheduler:
     
     def start(self):
         """
-        Start the scheduler with all jobs.
+        Start the scheduler with all jobs using MongoDB persistence.
+        
+        RENDER COMPATIBILITY:
+        - Jobs are stored in MongoDB, not memory
+        - Jobs survive app restarts and deployments
+        - Duplicate jobs are prevented by checking existing IDs
         """
         if self.is_running:
             print("⚠️ Scheduler already running")
             return
         
-        # Monthly segmentation - Run on 1st day of month at 2 AM
-        self.scheduler.add_job(
-            self.monthly_segmentation_job,
-            CronTrigger(day=1, hour=2, minute=0),
-            id="monthly_segmentation",
-            name="Monthly Customer Segmentation"
-        )
-        
-        # Campaign execution - Check every 15 minutes
-        self.scheduler.add_job(
-            self.execute_scheduled_campaigns,
-            CronTrigger(minute="*/15"),
-            id="campaign_execution",
-            name="Email Campaign Execution"
-        )
-
-        # Scheduled individual emails - Check every minute
-        self.scheduler.add_job(
-            self.execute_scheduled_emails,
-            CronTrigger(minute="*"),
-            id="scheduled_email_dispatch",
-            name="Scheduled Email Dispatcher"
-        )
-        
-        # CRM Sync - Daily at 1 AM
-        self.scheduler.add_job(
-            self.sync_crm_data,
-            CronTrigger(hour=1, minute=0),
-            id="crm_sync",
-            name="Daily CRM Data Sync"
-        )
-        
-        self.scheduler.start()
-        self.is_running = True
-        print("✅ Automation Scheduler Started")
-        print("   - Monthly Segmentation: 1st of month at 2:00 AM")
-        print("   - Campaign Execution: Every 15 minutes")
-        print("   - Scheduled Email Dispatch: Every 1 minute")
-        print("   - CRM Sync: Daily at 1:00 AM")
+        try:
+            self.scheduler.start()
+            self.is_running = True
+            
+            # List of jobs to ensure exist
+            jobs_config = [
+                {
+                    'id': 'monthly_segmentation',
+                    'func': self.monthly_segmentation_job,
+                    'trigger': CronTrigger(day=1, hour=2, minute=0),
+                    'name': 'Monthly Customer Segmentation'
+                },
+                {
+                    'id': 'campaign_execution',
+                    'func': self.execute_scheduled_campaigns,
+                    'trigger': CronTrigger(minute="*/15"),
+                    'name': 'Email Campaign Execution'
+                },
+                {
+                    'id': 'scheduled_email_dispatch',
+                    'func': self.execute_scheduled_emails,
+                    'trigger': CronTrigger(minute="*"),
+                    'name': 'Scheduled Email Dispatcher'
+                },
+                {
+                    'id': 'crm_sync',
+                    'func': self.sync_crm_data,
+                    'trigger': CronTrigger(hour=1, minute=0),
+                    'name': 'Daily CRM Data Sync'
+                }
+            ]
+            
+            # Add jobs, replacing if they already exist
+            for job_config in jobs_config:
+                try:
+                    # Remove old job if exists (to avoid duplicates)
+                    self.scheduler.remove_job(job_config['id'])
+                except:
+                    pass  # Job doesn't exist yet, that's ok
+                
+                # Add the job
+                self.scheduler.add_job(
+                    job_config['func'],
+                    job_config['trigger'],
+                    id=job_config['id'],
+                    name=job_config['name'],
+                    replace_existing=True
+                )
+            
+            print("✅ Automation Scheduler Started (MongoDB-Backed)")
+            print("   - Source: MongoDB job store (persistent across restarts)")
+            print("   - Monthly Segmentation: 1st of month at 2:00 AM UTC")
+            print("   - Campaign Execution: Every 15 minutes")
+            print("   - Scheduled Email Dispatch: Every 1 minute")
+            print("   - CRM Sync: Daily at 1:00 AM UTC")
+            
+        except Exception as e:
+            print(f"❌ Failed to start scheduler: {e}")
+            self.is_running = False
     
     def stop(self):
         """Stop the scheduler"""

@@ -8,4 +8,5 @@ python-dotenv
 motor
 simple-salesforce
 apscheduler
+pymongo
 kaggle

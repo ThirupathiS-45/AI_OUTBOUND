@@ -63,16 +63,21 @@ async def shutdown_db_client():
     automation_scheduler.stop()
 
 # Add CORS middleware to allow frontend connection
+allowed_origins = [
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
+]
+
+# Add frontend URL from environment variable if provided
+frontend_url = os.getenv("FRONTEND_URL", "").strip()
+if frontend_url:
+    allowed_origins.append(frontend_url)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5173",
-        "http://127.0.0.1:5174",
-        "https://sales-crm-frontend.onrender.com",  # Render production
-        os.getenv("FRONTEND_URL", "")  # Dynamic frontend URL
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
