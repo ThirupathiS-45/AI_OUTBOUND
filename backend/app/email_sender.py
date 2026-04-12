@@ -86,4 +86,3 @@ def send_sales_email(
             "message": f"Failed to send email: {str(e)}",
             "email_body": email_body
         }
-        }
