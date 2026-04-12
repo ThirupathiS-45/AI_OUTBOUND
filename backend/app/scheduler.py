@@ -10,6 +10,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.jobstores.mongodb import MongoDBJobStore
 from apscheduler.executors.asyncio import AsyncIOExecutor
 from datetime import datetime
+from pymongo import MongoClient
 from app.database import db
 from app.segmentation import enrich_lead_data
 from app.email_sender import send_sales_email
@@ -36,14 +37,22 @@ class AutomationScheduler:
         mongo_url = os.getenv("MONGO_URL", "mongodb://localhost:27017")
         db_name = os.getenv("DB_NAME", "ai_sales_db")
         
+        # Create MongoDB client with connection string
+        try:
+            mongo_client = MongoClient(mongo_url, serverSelectionTimeoutMS=5000)
+            # Test connection
+            mongo_client.server_info()
+        except Exception as e:
+            print(f"⚠️ Warning: Could not connect to MongoDB: {e}")
+            mongo_client = None
+        
         # Configure job store to use MongoDB instead of in-memory
         # This ensures jobs persist across app restarts (critical for Render)
         jobstores = {
             'default': MongoDBJobStore(
                 database=db_name,
                 collection='scheduler_jobs',
-                client=None,  # Will use pymongo.MongoClient with connection string
-                url=mongo_url
+                client=mongo_client  # Pass the actual MongoClient object, not url
             )
         }
         
