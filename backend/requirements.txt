@@ -10,3 +10,4 @@ simple-salesforce
 apscheduler
 pymongo
 kaggle
+sendgrid

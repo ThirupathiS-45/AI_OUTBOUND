@@ -1,16 +1,13 @@
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import os
 from dotenv import load_dotenv
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 from app.utils import generate_email_llama2
 
 load_dotenv()
 
-EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
-EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
-EMAIL_USER = os.getenv("EMAIL_USER")
-EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
+SENDGRID_API_KEY = os.getenv("SENDGRID_API_KEY")
+EMAIL_USER = os.getenv("EMAIL_USER", "techinfoproject22@gmail.com")
 
 
 def send_sales_email(
@@ -22,14 +19,14 @@ def send_sales_email(
     subject: str
 ):
     """
-    Generate AI-powered email content and send it via SMTP
+    Generate AI-powered email content and send via SendGrid API
     """
     
-    # Validate SMTP credentials
-    if not EMAIL_USER or not EMAIL_PASSWORD:
+    # Validate SendGrid API key
+    if not SENDGRID_API_KEY:
         return {
             "success": False,
-            "message": "Email credentials not configured. Please set EMAIL_USER and EMAIL_PASSWORD in environment.",
+            "message": "SendGrid API key not configured. Please set SENDGRID_API_KEY in environment.",
             "email_body": ""
         }
     
@@ -41,45 +38,31 @@ def send_sales_email(
         item_count=item_count
     )
     
-    # Create email message
-    message = MIMEMultipart()
-    message["From"] = EMAIL_USER
-    message["To"] = customer_email
-    message["Subject"] = subject
-    
-    # Add body to email
-    message.attach(MIMEText(email_body, "plain"))
-    
     try:
-        # Create SMTP session - Use SSL for port 465, TLS for port 587
-        if EMAIL_PORT == 465:
-            with smtplib.SMTP_SSL(EMAIL_HOST, EMAIL_PORT, timeout=10) as server:
-                server.login(EMAIL_USER, EMAIL_PASSWORD)
-                server.send_message(message)
+        # Create email via SendGrid API
+        message = Mail(
+            from_email=EMAIL_USER,
+            to_emails=customer_email,
+            subject=subject,
+            plain_text_content=email_body
+        )
+        
+        sg = SendGridAPIClient(SENDGRID_API_KEY)
+        response = sg.send(message)
+        
+        if response.status_code in [200, 201, 202]:
+            return {
+                "success": True,
+                "message": f"Email sent successfully to {customer_email}",
+                "email_body": email_body
+            }
         else:
-            with smtplib.SMTP(EMAIL_HOST, EMAIL_PORT, timeout=10) as server:
-                server.starttls()
-                server.login(EMAIL_USER, EMAIL_PASSWORD)
-                server.send_message(message)
-            
-        return {
-            "success": True,
-            "message": f"Email sent successfully to {customer_email}",
-            "email_body": email_body
-        }
+            return {
+                "success": False,
+                "message": f"SendGrid error: {response.status_code}",
+                "email_body": email_body
+            }
     
-    except smtplib.SMTPAuthenticationError:
-        return {
-            "success": False,
-            "message": "Authentication failed. Check your email credentials.",
-            "email_body": email_body
-        }
-    except smtplib.SMTPException as e:
-        return {
-            "success": False,
-            "message": f"SMTP error occurred: {str(e)}",
-            "email_body": email_body
-        }
     except Exception as e:
         return {
             "success": False,
